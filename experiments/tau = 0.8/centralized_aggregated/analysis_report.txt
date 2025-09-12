@@ -1,0 +1,16 @@
+Two-Class Sweep Results Analysis
+========================================
+
+Generated: 2025-08-30 12:46:07
+Total experiments: 40
+
+Parameter ranges:
+  Horizons: [np.int64(10), np.int64(20), np.int64(30), np.int64(50), np.int64(100), np.int64(200), np.int64(300), np.int64(400), np.int64(500), np.int64(600)]
+  Deadbands: [np.float64(2.0), np.float64(5.0), np.float64(10.0), np.float64(20.0)]
+
+Best configuration by profit:
+  Horizon: 400 min
+  Deadband: 10.0 bps
+  Profit: 167.64 bps
+  Coverage: 2.9%
+  Win Rate: 88.5%

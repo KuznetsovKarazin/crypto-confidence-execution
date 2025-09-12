@@ -1,0 +1,54 @@
+# Data files 
+data/
+*.parquet
+*.csv
+*.h5
+*.hdf5
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Model artifacts
+*.joblib
+*.pkl
+*.pickle
+*.pth
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/
+.cache/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Large experiment outputs (keep structure, exclude large files)
+experiments/*/debug/
+experiments/*/*.parquet
+experiments/*/*.csv
+experiments/*/model.pth
+experiments/*/logs.txt

@@ -1,0 +1,135 @@
+2025-09-12 21:50:45,068 - __main__ - INFO - Logging to experiments\centralized\2025-09-12_215045_mlp_h600_db10.0_2class_cal\logs.txt
+2025-09-12 21:50:45,068 - __main__ - INFO - Random seed set to 42
+2025-09-12 21:50:45,068 - __main__ - INFO - Starting centralized training pipeline
+2025-09-12 21:50:45,068 - __main__ - INFO - TWO-CLASS MODE ENABLED: Training binary direction classifier only
+2025-09-12 21:50:45,068 - __main__ - INFO - ============================================================
+2025-09-12 21:50:45,068 - __main__ - INFO - LOADING AND PREPARING DATA
+2025-09-12 21:50:45,068 - __main__ - INFO - ============================================================
+2025-09-12 21:50:45,068 - __main__ - INFO - Loading data from data\processed\unified_dataset.parquet
+2025-09-12 21:50:52,794 - __main__ - INFO - Loaded dataset: 5,672,947 rows, 296 columns
+2025-09-12 21:50:52,951 - __main__ - INFO - Symbols: 11
+2025-09-12 21:50:52,983 - __main__ - INFO - Date range: 2023-10-07 11:21:00+00:00 to 2024-10-13 05:36:00+00:00
+2025-09-12 21:50:52,983 - __main__ - INFO - Creating classification targets: horizon=600min, deadband=10.0bps
+2025-09-12 21:50:59,195 - __main__ - INFO - Input memory usage: 13873.5 MB
+2025-09-12 21:50:59,886 - __main__ - INFO - Data sorted by symbol and timestamp
+2025-09-12 21:51:02,048 - __main__ - INFO - Valid samples: 5,666,347 / 5,672,947 (99.9%)
+2025-09-12 21:51:13,290 - __main__ - INFO - Classification target distribution:
+2025-09-12 21:51:13,290 - __main__ - INFO -   Down: 2,573,961 (45.4%)
+2025-09-12 21:51:13,290 - __main__ - INFO -   Up: 2,759,813 (48.7%)
+2025-09-12 21:51:13,290 - __main__ - INFO -   No-trade: 332,573 (5.9%)
+2025-09-12 21:51:13,317 - __main__ - INFO - Binary target distribution (trade vs no-trade):
+2025-09-12 21:51:13,317 - __main__ - INFO -   No-trade: 332,573 (5.9%)
+2025-09-12 21:51:13,317 - __main__ - INFO -   Trade: 5,333,774 (94.1%)
+2025-09-12 21:51:13,353 - __main__ - INFO - Direction distribution (trade samples only):
+2025-09-12 21:51:13,359 - __main__ - INFO -   Down: 2,573,961 (48.3%)
+2025-09-12 21:51:13,363 - __main__ - INFO -   Up: 2,759,813 (51.7%)
+2025-09-12 21:51:23,313 - __main__ - INFO - Output memory usage: 13987.8 MB
+2025-09-12 21:51:23,504 - __main__ - INFO - Class distribution (two_class mode):
+2025-09-12 21:51:23,504 - __main__ - INFO -   Down: 2,573,961 (48.3%)
+2025-09-12 21:51:23,504 - __main__ - INFO -   Up: 2,759,813 (51.7%)
+2025-09-12 21:51:23,504 - __main__ - INFO - Creating symbol-wise temporal splits: train=70.0%, val=15.0%, test=15.0%
+2025-09-12 21:52:26,317 - __main__ - INFO - Symbol-wise temporal split statistics:
+2025-09-12 21:52:31,650 - __main__ - INFO -   Train: 3,966,438 samples, 11 symbols, 9809.5 MB
+2025-09-12 21:52:31,650 - __main__ - INFO -     Date range: 2023-10-07 11:21:00+00:00 to 2024-06-26 14:50:00+00:00
+2025-09-12 21:52:32,772 - __main__ - INFO -   Validation: 849,947 samples, 11 symbols, 2149.3 MB
+2025-09-12 21:52:32,772 - __main__ - INFO -     Date range: 2024-06-23 23:34:00+00:00 to 2024-08-19 14:42:00+00:00
+2025-09-12 21:52:33,864 - __main__ - INFO -   Test: 849,962 samples, 11 symbols, 2149.4 MB
+2025-09-12 21:52:33,864 - __main__ - INFO -     Date range: 2024-08-15 21:34:00+00:00 to 2024-10-12 19:24:00+00:00
+2025-09-12 21:52:34,891 - __main__ - INFO - Filtering for trade-only samples (two-class mode)
+2025-09-12 21:52:38,587 - __main__ - INFO - Trade-only filtering results:
+2025-09-12 21:52:38,587 - __main__ - INFO -   Train: 3,966,438 -> 3,723,136 (93.9%)
+2025-09-12 21:52:38,589 - __main__ - INFO -   Val: 849,947 -> 807,671 (95.0%)
+2025-09-12 21:52:38,589 - __main__ - INFO -   Test: 849,962 -> 802,967 (94.5%)
+2025-09-12 21:52:39,050 - __main__ - INFO - ============================================================
+2025-09-12 21:52:39,050 - __main__ - INFO - FEATURE PROCESSING
+2025-09-12 21:52:39,050 - __main__ - INFO - ============================================================
+2025-09-12 21:52:39,050 - __main__ - INFO - Capping training data: 3,723,136 -> 100,000 rows
+2025-09-12 21:52:42,511 - __main__ - INFO - After capping: 99,995 rows using proportional random sampling
+2025-09-12 21:52:43,798 - __main__ - WARNING - Removing feature bids_levels_depth_1: all NaN or constant
+2025-09-12 21:52:43,804 - __main__ - WARNING - Removing feature bids_levels_depth_5: all NaN or constant
+2025-09-12 21:52:43,811 - __main__ - WARNING - Removing feature bids_levels_available: all NaN or constant
+2025-09-12 21:52:43,818 - __main__ - WARNING - Removing feature asks_levels_depth_1: all NaN or constant
+2025-09-12 21:52:43,824 - __main__ - WARNING - Removing feature asks_levels_depth_5: all NaN or constant
+2025-09-12 21:52:43,830 - __main__ - WARNING - Removing feature asks_levels_available: all NaN or constant
+2025-09-12 21:52:43,957 - __main__ - WARNING - Removing feature volume_ratio: all NaN or constant
+2025-09-12 21:52:44,083 - __main__ - INFO - Selecting top 64 features using mutual_info
+2025-09-12 21:54:50,312 - __main__ - INFO - mutual_info selection done in 126.2s on sample 99,995 rows, picked 64 features
+2025-09-12 21:54:50,312 - __main__ - INFO - Selected 64 features
+2025-09-12 21:54:50,312 - __main__ - INFO -   price: 4 features
+2025-09-12 21:54:50,312 - __main__ - INFO -   returns: 5 features
+2025-09-12 21:54:50,312 - __main__ - INFO -   volatility: 3 features
+2025-09-12 21:54:50,312 - __main__ - INFO -   volume: 2 features
+2025-09-12 21:54:50,312 - __main__ - INFO -   spread: 1 features
+2025-09-12 21:54:50,312 - __main__ - INFO -   technical: 6 features
+2025-09-12 21:54:50,312 - __main__ - INFO -   other: 44 features
+2025-09-12 21:54:50,523 - __main__ - INFO - Feature matrix shapes:
+2025-09-12 21:54:50,523 - __main__ - INFO -   Train: (99995, 64)
+2025-09-12 21:54:50,523 - __main__ - INFO -   Val: (807671, 64)
+2025-09-12 21:54:50,523 - __main__ - INFO -   Test: (802967, 64)
+2025-09-12 21:54:50,523 - __main__ - INFO - Fitting preprocessors on training data
+2025-09-12 21:54:50,523 - __main__ - INFO - Using imputer strategy: median
+2025-09-12 21:54:51,475 - __main__ - INFO - Fitting RobustScaler
+2025-09-12 21:54:51,539 - __main__ - INFO - Scaler fitted: center range [0.001, 383783.400]
+2025-09-12 21:54:51,539 - __main__ - INFO - Scale range: [0.017, 95303054.759]
+2025-09-12 21:54:54,143 - __main__ - INFO - Saved preprocessors to experiments\centralized\2025-09-12_215045_mlp_h600_db10.0_2class_cal
+2025-09-12 21:54:54,158 - __main__ - INFO - Final feature shapes: Train (99995, 64), Val (807671, 64), Test (802967, 64)
+2025-09-12 21:54:54,159 - __main__ - INFO - Target mode: direction (0/1)
+2025-09-12 21:54:54,205 - __main__ - INFO - ============================================================
+2025-09-12 21:54:54,205 - __main__ - INFO - MODEL TRAINING
+2025-09-12 21:54:54,205 - __main__ - INFO - ============================================================
+2025-09-12 21:54:54,205 - __main__ - INFO - Training MLP model with architecture: [256, 128, 64]
+2025-09-12 21:54:54,205 - __main__ - INFO - Using two-class mode: binary direction classifier (Up vs Down)
+2025-09-12 21:54:54,221 - __main__ - INFO - Training two-class direction classifier (Up vs Down)
+2025-09-12 21:54:54,221 - __main__ - INFO - Direction distribution: Down=48083, Up=51912
+2025-09-12 21:54:54,221 - __main__ - INFO - Class balance: 0.519 Up ratio
+2025-09-12 21:54:54,235 - __main__ - INFO - Sample weights: mean=1.0000, std=0.0383
+2025-09-12 21:55:10,286 - __main__ - INFO - Calibrating two-class probabilities using isotonic method
+2025-09-12 21:55:11,233 - __main__ - INFO - Two-class probability calibration completed
+2025-09-12 21:55:11,233 - __main__ - INFO - Using provided confidence tau: 0.800
+2025-09-12 21:55:13,430 - __main__ - INFO - Saved decision threshold config to experiments\centralized\2025-09-12_215045_mlp_h600_db10.0_2class_cal/decision_threshold.json
+2025-09-12 21:55:13,430 - __main__ - INFO - Validation profit with tau=0.800: 186.24 bps (coverage: 14.6%)
+2025-09-12 21:55:15,300 - __main__ - INFO - Saved two-class model to experiments\centralized\2025-09-12_215045_mlp_h600_db10.0_2class_cal
+2025-09-12 21:55:15,300 - __main__ - INFO - ============================================================
+2025-09-12 21:55:15,300 - __main__ - INFO - EVALUATION AND SAVING
+2025-09-12 21:55:15,300 - __main__ - INFO - ============================================================
+2025-09-12 21:55:15,300 - __main__ - INFO - Evaluating model performance...
+2025-09-12 21:55:17,579 - __main__ - INFO - Two-class mode test metrics:
+2025-09-12 21:55:17,579 - __main__ - INFO -   Coverage: 8.0% (64297/802967 trades)
+2025-09-12 21:55:17,579 - __main__ - INFO -   Direction Accuracy: 0.8208
+2025-09-12 21:55:17,579 - __main__ - INFO -   Average Profit: 162.24 bps
+2025-09-12 21:55:17,579 - __main__ - INFO -   Median Profit: 154.25 bps
+2025-09-12 21:55:17,579 - __main__ - INFO -   Win Rate: 82.1%
+2025-09-12 21:55:17,579 - __main__ - INFO -   Average Confidence: 0.818
+2025-09-12 21:55:17,579 - __main__ - INFO -   Profit Sharpe: 0.886
+2025-09-12 21:55:17,579 - __main__ - INFO -   Profit Range: [-468.7, 937.7] bps
+2025-09-12 21:55:26,627 - __main__ - INFO - Two-class artifacts saved to experiments\centralized\2025-09-12_215045_mlp_h600_db10.0_2class_cal
+2025-09-12 21:55:26,627 - __main__ - INFO - Results saved successfully
+2025-09-12 21:55:26,627 - __main__ - INFO - Training pipeline completed successfully
+2025-09-12 21:55:29,667 - __main__ - INFO - ================================================================================
+2025-09-12 21:55:29,667 - __main__ - INFO - TRAINING COMPLETED SUCCESSFULLY
+2025-09-12 21:55:29,667 - __main__ - INFO - ================================================================================
+2025-09-12 21:55:29,667 - __main__ - INFO - Results saved to: experiments\centralized\2025-09-12_215045_mlp_h600_db10.0_2class_cal
+2025-09-12 21:55:29,667 - __main__ - INFO - Key files:
+2025-09-12 21:55:29,667 - __main__ - INFO -   - Model: experiments\centralized\2025-09-12_215045_mlp_h600_db10.0_2class_cal/model.pth (or model.joblib)
+2025-09-12 21:55:29,667 - __main__ - INFO -   - Two-class metrics: experiments\centralized\2025-09-12_215045_mlp_h600_db10.0_2class_cal/metrics_two_class.json
+2025-09-12 21:55:29,667 - __main__ - INFO -   - Two-class model: experiments\centralized\2025-09-12_215045_mlp_h600_db10.0_2class_cal/two_class_model.joblib
+2025-09-12 21:55:29,671 - __main__ - INFO -   - Decision threshold: experiments\centralized\2025-09-12_215045_mlp_h600_db10.0_2class_cal/decision_threshold.json
+2025-09-12 21:55:29,671 - __main__ - INFO -   - Predictions: experiments\centralized\2025-09-12_215045_mlp_h600_db10.0_2class_cal/test_predictions_two_class.csv
+2025-09-12 21:55:29,671 - __main__ - INFO -   - Config: experiments\centralized\2025-09-12_215045_mlp_h600_db10.0_2class_cal/config.yaml
+2025-09-12 21:55:29,671 - __main__ - INFO -   - Logs: experiments\centralized\2025-09-12_215045_mlp_h600_db10.0_2class_cal/logs.txt
+2025-09-12 21:55:29,671 - __main__ - INFO -   - Preprocessors: experiments\centralized\2025-09-12_215045_mlp_h600_db10.0_2class_cal/imputer.joblib, experiments\centralized\2025-09-12_215045_mlp_h600_db10.0_2class_cal/scaler.joblib
+2025-09-12 21:55:29,671 - __main__ - INFO - Final two-class test performance:
+2025-09-12 21:55:29,676 - __main__ - INFO -   Coverage: 8.0% (64297 trades)
+2025-09-12 21:55:29,676 - __main__ - INFO -   Direction Accuracy: 0.8208
+2025-09-12 21:55:29,676 - __main__ - INFO -   Average Profit: 162.24 bps
+2025-09-12 21:55:29,676 - __main__ - INFO -   Win Rate: 82.1%
+2025-09-12 21:55:29,676 - __main__ - INFO - ================================================================================
+2025-09-12 21:55:29,676 - __main__ - INFO - RECOMMENDATIONS FOR FURTHER IMPROVEMENT:
+2025-09-12 21:55:29,676 - __main__ - INFO - 1. Try different deadband_bps values (3-8 bps) for better class balance
+2025-09-12 21:55:29,676 - __main__ - INFO - 2. Experiment with feature engineering (rolling windows, cross-asset signals)
+2025-09-12 21:55:29,676 - __main__ - INFO - 3. Consider ensemble methods combining multiple models
+2025-09-12 21:55:29,676 - __main__ - INFO - 4. Implement cross-validation for more robust evaluation
+2025-09-12 21:55:29,676 - __main__ - INFO - 5. Add market regime detection for adaptive thresholds
+2025-09-12 21:55:29,676 - __main__ - INFO - 6. Try different confidence thresholds for risk/return tradeoff
+2025-09-12 21:55:29,676 - __main__ - INFO - 7. Experiment with different cost assumptions
+2025-09-12 21:55:29,676 - __main__ - INFO - ================================================================================

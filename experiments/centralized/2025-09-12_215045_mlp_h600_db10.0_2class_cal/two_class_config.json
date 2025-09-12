@@ -1,0 +1,5 @@
+{
+  "confidence_tau": 0.8,
+  "model_type": "two_class",
+  "is_calibrated": true
+}
