@@ -1,0 +1,5 @@
+python centralized_training_two_classes.py --unified data/processed/unified_dataset.parquet --out experiments/centralized --task classification --horizon_min 600 --deadband_bps 20 --model mlp   --epochs 15 --batch_size 4096 --learning_rate 0.000001  --seed 42 --top_k_features 128  --two_class_mode  --use_robust_scaler --calibrate_probabilities --confidence_tau 0.60 --max_train_size 999999999
+
+without 
+--optimize_threshold_for_profit 
+--optimize_tau_by profit_with_min_coverage 

@@ -9,9 +9,6 @@ in cryptocurrency markets using unified microstructure and macroeconomic feature
 Enhanced with proper class weighting, two-stage training approach, two-class mode,
 and critical bug fixes.
 
-Author: AI Assistant
-License: MIT
-Version: 1.3 - Added two-class mode support
 """
 
 import warnings
@@ -26,6 +23,8 @@ import numpy as np
 import pandas as pd
 from dataclasses import dataclass, field
 import joblib
+import sys
+import logging
 
 # ML/DL libraries
 from sklearn.preprocessing import StandardScaler, RobustScaler
@@ -40,6 +39,8 @@ from sklearn.utils.class_weight import compute_sample_weight
 from sklearn.impute import SimpleImputer
 from sklearn.feature_selection import SelectKBest, f_classif, mutual_info_classif
 from sklearn.feature_selection import mutual_info_classif
+
+
 def mi_score_func(X, y):
     return mutual_info_classif(X, y, n_neighbors=2, random_state=42)
 
@@ -54,6 +55,14 @@ try:
 except ImportError:
     TORCH_AVAILABLE = False
     warnings.warn("PyTorch not available. MLP will use sklearn MLPClassifier fallback.")
+
+import matplotlib
+matplotlib.use("Agg") 
+import matplotlib.pyplot as plt
+from matplotlib.ticker import MaxNLocator
+
+
+pd.set_option("mode.copy_on_write", True)
 
 # Suppress common warnings
 warnings.filterwarnings('ignore', category=FutureWarning, module='sklearn')
@@ -298,11 +307,9 @@ class FeatureProcessor:
         """Fit feature list and selector using TRAIN ONLY (safe alignment + robust sampling)."""
         rng = np.random.default_rng(getattr(self, "seed", 42))
 
-        # 1) Кандидаты: только числовые (и не исключённые)
         numeric_cols = df_train.select_dtypes(include=[np.number]).columns.tolist()
         candidates = [c for c in numeric_cols if c not in getattr(self, "exclude_cols", [])]
 
-        # 2) Удаляем константы/все-NaN
         valid = []
         for c in candidates:
             col = df_train[c]
@@ -314,22 +321,40 @@ class FeatureProcessor:
         if not valid:
             raise ValueError("No valid features found")
 
-        # 3) Подготовим X и y с ЖЁСТКИМ выравниванием по индексам
-        X_all = df_train.loc[:, valid]  # важен .loc, чтобы сохранить индекс
+        X_all = df_train.loc[:, valid] 
         y_series = None
         if y_train is not None:
             if isinstance(y_train, pd.Series):
                 y_series = y_train.reindex(df_train.index)
             else:
-                # предполагаем, что y_train соответствует df_train по порядку
+
                 if len(y_train) != len(df_train):
                     raise ValueError("y_train length does not match df_train rows")
                 y_series = pd.Series(y_train, index=df_train.index)
 
-            # выравниваем X и y на пересечении индексов
-            X_all, y_series = X_all.align(y_series, join="inner", axis=0)
+                X_all = df_train.loc[:, valid]
+                X_all = X_all.replace([np.inf, -np.inf], np.nan)
 
-        # 4) Если селекция не нужна (меньше top_k или топ-к не задан) — просто зафиксируем имена
+                for c in X_all.columns:
+                    if pd.api.types.is_float_dtype(X_all[c]):
+                        X_all[c] = X_all[c].astype(np.float32)
+
+                y_series = None
+                if y_train is not None:
+                    if isinstance(y_train, pd.Series):
+                        y_series = y_train.reindex(df_train.index)
+                    else:
+                        if len(y_train) != len(df_train):
+                            raise ValueError("y_train length does not match df_train rows")
+                        y_series = pd.Series(y_train, index=df_train.index)
+
+                    common_idx = X_all.index.intersection(y_series.index)
+                    if len(common_idx) == 0:
+                        raise ValueError("No common indices between features and target")
+                    X_all = X_all.loc[common_idx]
+                    y_series = y_series.loc[common_idx]
+
+
         need_selection = bool(self.top_k_features) and (len(valid) > int(self.top_k_features))
         if not need_selection:
             self.feature_names = sorted(valid)
@@ -338,7 +363,6 @@ class FeatureProcessor:
 
         logger.info(f"Selecting top {self.top_k_features} features using {self.feature_selection_method}")
 
-        # 5) Универсальный безопасный сэмплер позиций (0..n-1), с опциональной стратификацией по symbol
         def sample_positions_stratified(n_max: int) -> np.ndarray:
             n_rows = len(X_all)
             if n_rows == 0:
@@ -349,9 +373,9 @@ class FeatureProcessor:
                 return np.arange(n_rows, dtype=np.int64)
 
             if "symbol" in df_train.columns:
-                # символы на тех же индексах, что и X_all
+
                 symbol_series = df_train.loc[X_all.index, "symbol"]
-                # сгруппируем ПО ПОЗИЦИЯМ, не по меткам индексов
+
                 groups: Dict[Any, List[int]] = {}
                 for pos, sym in enumerate(symbol_series.to_numpy()):
                     groups.setdefault(sym, []).append(pos)
@@ -374,10 +398,8 @@ class FeatureProcessor:
                         picked = rng.choice(picked, size=n_max, replace=False).tolist()
                     return np.asarray(picked, dtype=np.int64)
 
-            # без символов — просто случайные позиции
             return rng.choice(len(X_all), size=n_max, replace=False).astype(np.int64)
 
-        # 6) Ветви селекции
         selected_features: List[str]
 
         method = str(getattr(self, "feature_selection_method", "variance")).lower()
@@ -391,15 +413,12 @@ class FeatureProcessor:
             t0 = time.perf_counter()
             pos = sample_positions_stratified(n_max_mi)
 
-            # формируем сэмпл
             X_sample = X_all.iloc[pos].replace([np.inf, -np.inf], np.nan)
             y_sample = y_series.iloc[pos]
 
-            # простая импутация + компактный тип
             X_sample = X_sample.fillna(X_sample.mean()).astype(np.float32)
             y_sample = np.asarray(y_sample).ravel()
 
-            # используем заранее определённую top-level функцию mi_score_func (как у тебя было)
             selector = SelectKBest(score_func=mi_score_func, k=int(self.top_k_features))
             selector.fit(X_sample, y_sample)
             selected_features = X_sample.columns[selector.get_support()].tolist()
@@ -428,7 +447,7 @@ class FeatureProcessor:
             logger.info(f"f_classif selection picked {len(selected_features)} features from {X_sample.shape[1]}")
 
         else:
-            # Фоллбек: дисперсия (работает без y)
+ 
             if method not in {"variance", "var"}:
                 logger.warning(f"Unknown/unsupported selection method '{method}' with given y; falling back to variance")
 
@@ -438,14 +457,12 @@ class FeatureProcessor:
             else:
                 sample = X_all
 
-            # заменим inf на NaN, чтобы var() не сломался, и проимпутим
             sample = sample.replace([np.inf, -np.inf], np.nan).fillna(sample.mean())
             vars_ = sample.var().sort_values(ascending=False)
             selected_features = vars_.index[: int(self.top_k_features)].tolist()
 
             logger.info(f"variance selection picked {len(selected_features)} features from {sample.shape[1]}")
 
-        # 7) Финал
         if not selected_features:
             raise ValueError("Feature selection produced empty feature set")
 
@@ -478,14 +495,31 @@ class FeatureProcessor:
         return df[self.feature_names]
 
     def fit_preprocessors(self, X_train: pd.DataFrame) -> None:
-        """Fit imputer and scaler on training data."""
+        """Fit imputer and scaler on training data with memory-efficient chunking."""
         logger.info("Fitting preprocessors on training data")
         
         # Fit imputer with strategy aligned to scaler choice
         imputer_strategy = "median" if self.use_robust_scaler else "mean"
         logger.info(f"Using imputer strategy: {imputer_strategy}")
-        self.imputer = SimpleImputer(strategy=imputer_strategy)
-        self.imputer.fit(X_train)
+        
+        # For large datasets with median, compute column-wise medians manually
+        if len(X_train) > 1_000_000 and imputer_strategy == "median":
+            logger.info("Large dataset detected - using memory-efficient median computation")
+            
+            # Compute medians column by column to avoid memory issues
+            medians = []
+            for col in X_train.columns:
+                col_median = X_train[col].median(skipna=True)
+                medians.append(col_median)
+            
+            # Create a simple imputer with pre-computed statistics
+            self.imputer = SimpleImputer(strategy="constant", fill_value=0)  # Dummy fit
+            self.imputer.fit(X_train.iloc[:1000])  # Fit on small sample for structure
+            self.imputer.statistics_ = np.array(medians, dtype=np.float64)
+            
+        else:
+            self.imputer = SimpleImputer(strategy=imputer_strategy)
+            self.imputer.fit(X_train)
         
         # Transform training data for scaler fitting
         X_imputed = self.imputer.transform(X_train)
@@ -866,17 +900,11 @@ class TwoClassConfidenceClassifier:
         tau_grid_start: float = 0.5,
         tau_grid_end: float = 0.95,
         tau_grid_step: float = 0.01,
-        select_by: str = "profit",                 # 'profit' | 'ev' | 'profit_with_min_coverage'
+        select_by: str = "profit",
         min_coverage: float | None = None,
-        output_dir: "Path | None" = None           #optional: where to save the CSV
+        output_dir: "Path | None" = None
     ) -> float:
-        """
-        Optimize confidence threshold tau.
-        select_by:
-            'profit' -> maximum average profit per trade (as before)
-            'ev' -> maximum EV_per_obs = profit_bps * coverage
-            'profit_with_min_coverage' -> maximum profit with coverage >= min_coverage
-        """
+        """Optimize confidence threshold tau."""
         logger.info(f"Optimizing confidence tau (cost={cost_bps} bps, select_by={select_by}, "
                     f"min_coverage={min_coverage})")
 
@@ -892,66 +920,28 @@ class TwoClassConfidenceClassifier:
             confidence = np.maximum(p_up, p_down)
             execute = confidence >= tau
 
-            # --- ZERO-COVERAGE SAFETY BLOCK: paste right after `execute = (confidence >= tau)` ---
-            n_total = int(len(y_test))
-            n_exec = int(execute.sum())
-
-            if n_exec == 0:
-                
-                two_class_metrics = {
-                    "coverage": 0.0,
-                    "n_executed": 0,
-                    "n_total": n_total,
-                    "direction_accuracy": 0.0,
-                    "avg_profit_bps": -self.config.profit_cost_bps,   
-                    "median_profit_bps": -self.config.profit_cost_bps,
-                    "win_rate": 0.0,
-                    "avg_confidence": float(np.maximum(p_up, p_down).mean()),
-                    "profit_std_bps": 0.0,
-                    "profit_sharpe": 0.0,
-                    "max_profit_bps": 0.0,
-                    "min_profit_bps": 0.0,
-                    "profit_p25_bps": 0.0,
-                    "profit_p75_bps": 0.0,
-                    "profit_p90_bps": 0.0,
-                    "profit_p10_bps": 0.0,
-                }
-
-                
-                preds_cols = ["symbol","timestamp","p_up","p_down","confidence","y_true","return_bps","executed"]
-                pd.DataFrame(columns=preds_cols).to_csv(output_dir / "test_predictions_two_class.csv",
-                                                        index=False, encoding="utf-8")
-
-                
-                self._log_two_class_metrics(two_class_metrics)
-                (output_dir / "metrics_two_class.json").write_text(
-                    json.dumps(two_class_metrics, ensure_ascii=False, indent=2),
-                    encoding="utf-8"
-                )
-                return two_class_metrics
-            # --- end ZERO-COVERAGE SAFETY BLOCK ---
-
-
             if execute.sum() == 0:
-                profit = -cost_bps          # no trades -> empty penalty (or 0.0 if you prefer)
-                coverage = 0.0
-                hit_rate = 0.0
-                n_trades = 0
-            else:
-                # Direction and facts
-                direction_pred = (p_up > p_down)[execute]           # 1=Up, 0=Down
-                direction_true = y_direction_val[execute]           # 1=Up, 0=Down
-                trade_returns = returns_bps[execute]                # future bps
+                results.append({
+                    "tau": float(tau),
+                    "profit_bps": -cost_bps,
+                    "coverage": 0.0,
+                    "hit_rate": 0.0,
+                    "n_trades": 0,
+                    "EV_per_obs": 0.0
+                })
+                continue  
 
-                # PnL by direction, then subtract costs
-                direction_profit = np.where(direction_pred == 1, trade_returns, -trade_returns)
-                net_profit = direction_profit - cost_bps
+            direction_pred = (p_up > p_down)[execute]
+            direction_true = y_direction_val[execute]
+            trade_returns = returns_bps[execute]
 
-                profit = float(net_profit.mean())                   # average profit per transaction
-                coverage = float(execute.mean())                    # share of executables
-                hit_rate = float((direction_pred == direction_true).mean())
-                n_trades = int(execute.sum())
+            direction_profit = np.where(direction_pred == 1, trade_returns, -trade_returns)
+            net_profit = direction_profit - cost_bps
 
+            profit = float(net_profit.mean())
+            coverage = float(execute.mean())
+            hit_rate = float((direction_pred == direction_true).mean())
+            n_trades = int(execute.sum())
             ev_per_obs = profit * coverage
 
             results.append({
@@ -963,42 +953,39 @@ class TwoClassConfidenceClassifier:
                 "EV_per_obs": ev_per_obs
             })
 
-        # The best by different criteria
+
         best_by_profit = max(results, key=lambda r: r["profit_bps"])
-        best_by_ev     = max(results, key=lambda r: r["EV_per_obs"])
+        best_by_ev = max(results, key=lambda r: r["EV_per_obs"])
 
         if select_by == "ev":
             chosen = best_by_ev
         elif select_by == "profit_with_min_coverage":
             thr = 0.0 if min_coverage is None else float(min_coverage)
             eligible = [r for r in results if r["coverage"] >= thr]
-            chosen = max(eligible, key=lambda r: r["profit_bps"]) if len(eligible) else best_by_profit
+            chosen = max(eligible, key=lambda r: r["profit_bps"]) if eligible else best_by_profit
         else:  # 'profit' by default
             chosen = best_by_profit
 
-        # Landmark Logs
+
         logger.info(f"Best by profit: tau={best_by_profit['tau']:.3f}, "
                     f"profit={best_by_profit['profit_bps']:.2f} bps, "
                     f"cov={best_by_profit['coverage']:.3%}, trades={best_by_profit['n_trades']}")
-        logger.info(f"Best by EV:     tau={best_by_ev['tau']:.3f}, "
+        logger.info(f"Best by EV: tau={best_by_ev['tau']:.3f}, "
                     f"EV={best_by_ev['EV_per_obs']:.2f}, "
                     f"cov={best_by_ev['coverage']:.3%}, profit={best_by_ev['profit_bps']:.2f}")
-
         logger.info(f"Chosen tau ({select_by}): {chosen['tau']:.3f} | "
                     f"profit={chosen['profit_bps']:.2f} bps, cov={chosen['coverage']:.3%}, "
                     f"EV={chosen['EV_per_obs']:.2f}, trades={chosen['n_trades']}")
 
-        # Save CSV (if there is a place)
-        try:
-            import pandas as pd
-            df = pd.DataFrame(results)
-            if output_dir is not None:
+
+        if output_dir is not None:
+            try:
+                df = pd.DataFrame(results)
                 (output_dir / "tau_optimization_results.csv").parent.mkdir(parents=True, exist_ok=True)
                 df.to_csv(output_dir / "tau_optimization_results.csv", index=False)
-        except Exception as e:
-            logger.warning(f"Failed to save tau_optimization_results.csv: {e}")
+            except Exception as e:
+                logger.warning(f"Failed to save tau_optimization_results.csv: {e}")
 
-        # Also keep in mind
         self.tau_optimization_results = results
 
         return float(chosen["tau"])
@@ -1463,7 +1450,47 @@ class MetricsCalculator:
 
 class CentralizedTrainer:
     """Enhanced main training class with two-class mode support."""
-    
+
+    def _plot_training_progress(self, output_dir: Path):
+        if not self.training_history:
+            return
+        df = pd.DataFrame(self.training_history)
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        def _plot_line(ycols, title, fname, ylabel):
+            present = [c for c in ycols if c in df.columns]
+            if not present:
+                return
+            plt.figure(figsize=(9,5))
+            for c in present:
+                plt.plot(df['epoch'], df[c], label=c)
+            ax = plt.gca()
+            ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+            plt.xlabel("Epoch")
+            plt.ylabel(ylabel)
+            plt.title(title)
+            plt.legend()
+            plt.grid(True, alpha=0.3)
+            plt.tight_layout()
+            plt.savefig(output_dir / fname, dpi=150)
+            plt.close()
+
+        _plot_line(['train_loss','val_loss'], "Loss (train vs val)", "loss_progress.png", "Loss")
+        _plot_line(['train_acc','val_acc'],   "Accuracy (train vs val)", "acc_progress.png", "Accuracy")
+
+
+        _plot_line(['val_cov'],             "Coverage (val)",    "val_coverage.png", "Coverage")
+        _plot_line(['val_dir_acc'],         "Direction Acc (val)","val_dir_acc.png","Direction Accuracy")
+        _plot_line(['val_avg_profit_bps'],  "Avg Profit (val)",  "val_profit.png",  "Profit (bps)")
+        _plot_line(['val_win_rate'],        "Win rate (val)",    "val_winrate.png", "Win rate")
+        _plot_line(['val_avg_conf'],        "Avg Confidence (val)", "val_conf.png", "Confidence")
+
+
+        logger.info("Saved progress plots: loss_progress.png, acc_progress.png, "
+                    "val_coverage.png, val_dir_acc.png, val_profit.png, val_winrate.png, val_conf.png")
+
+
+
     def __init__(self, config: TrainingConfig):
         self.config = config
         self.device = self._setup_device()
@@ -1476,7 +1503,49 @@ class CentralizedTrainer:
         
         # Set random seeds
         self._set_seeds()
-        
+
+    def _two_class_val_snapshot(self, X_val: np.ndarray, y_val_dir: np.ndarray, returns_bps_val: np.ndarray,
+                                model, is_lstm: bool = False, val_extra=None) -> dict:
+  
+        model.eval()
+        with torch.no_grad():
+            if is_lstm:
+                X_seq, lengths = val_extra
+                tens = torch.FloatTensor(X_seq).to(self.device)
+                lens = torch.LongTensor(lengths).to(self.device)
+                logits = model(tens, lens)
+            else:
+                tens = torch.FloatTensor(X_val).to(self.device)
+                logits = model(tens)
+
+            proba = torch.softmax(logits, dim=1).cpu().numpy()  
+            p_up = proba[:, 1]
+            p_down = proba[:, 0]
+            confidence = np.maximum(p_up, p_down)
+            execute = confidence >= float(self.config.confidence_tau)
+            direction_pred = (p_up > p_down).astype(np.int8)
+
+        if execute.sum() == 0:
+            return {
+                "val_cov": 0.0, "val_dir_acc": 0.0, "val_avg_profit_bps": -float(self.config.profit_cost_bps),
+                "val_win_rate": 0.0, "val_avg_conf": float(confidence.mean())
+            }
+
+        executed_returns = returns_bps_val[execute]
+        executed_pred    = direction_pred[execute]
+        executed_true    = y_val_dir[execute]
+        gross = np.where(executed_pred == 1, executed_returns, -executed_returns)
+        net   = gross - float(self.config.profit_cost_bps)
+
+        return {
+            "val_cov": float(execute.mean()),
+            "val_dir_acc": float((executed_pred == executed_true).mean()),
+            "val_avg_profit_bps": float(net.mean()),
+            "val_win_rate": float((net > 0).mean()),
+            "val_avg_conf": float(confidence[execute].mean()) if execute.any() else float(confidence.mean())
+        }
+
+
     def _setup_device(self) -> str:
         """Setup compute device."""
         if not TORCH_AVAILABLE:
@@ -1548,6 +1617,9 @@ class CentralizedTrainer:
         
         train_df, val_df, test_df = self._split_data(data_with_targets)
         
+        self._val_y_direction = val_df['y_direction'].values.astype(np.int8)
+        self._val_ret_bps     = val_df['ret_bps'].values.astype(np.float32)
+        
         # Prepare features
         logger.info("="*60)
         logger.info("FEATURE PROCESSING")
@@ -1580,6 +1652,12 @@ class CentralizedTrainer:
         self._evaluate_and_save_results(results)
         
         logger.info("Training pipeline completed successfully")
+
+        try:
+            self._plot_training_progress(self.config.output_dir)
+        except Exception as _e:
+            logger.warning(f"Could not render progress plots: {_e}")
+
         return results
     
     def _load_data(self) -> pd.DataFrame:
@@ -1724,56 +1802,181 @@ class CentralizedTrainer:
                                          train_df, val_df, test_df)
     
     def _train_two_class_sklearn(self, X_train: np.ndarray, y_train: np.ndarray,
-                               X_val: np.ndarray, y_val: np.ndarray,
-                               X_test: np.ndarray, y_test: np.ndarray,
-                               train_df: pd.DataFrame, val_df: pd.DataFrame, test_df: pd.DataFrame) -> Dict[str, Any]:
-        """Train two-class mode classifier."""
-        logger.info("Using two-class mode: binary direction classifier (Up vs Down)")
+                            X_val: np.ndarray, y_val: np.ndarray,
+                            X_test: np.ndarray, y_test: np.ndarray,
+                            train_df: pd.DataFrame, val_df: pd.DataFrame, test_df: pd.DataFrame) -> Dict[str, Any]:
+        """Train two-class mode classifier with per-epoch validation logging."""
         
         from sklearn.neural_network import MLPClassifier
+        from sklearn.metrics import log_loss, accuracy_score
+        from sklearn.exceptions import ConvergenceWarning
+        warnings.filterwarnings('ignore', category=ConvergenceWarning)
+        
+        logger.info("Using two-class mode: binary direction classifier (Up vs Down)")
         
         # Verify targets are binary
         unique_classes = np.unique(y_train)
         if not np.array_equal(unique_classes, [0, 1]):
             raise ValueError(f"Two-class mode expects binary targets [0, 1], got {unique_classes}")
         
-        # Model parameters with early stopping enabled
-        model_params = {
-            'hidden_layer_sizes': tuple(self.config.mlp_hidden_sizes),
-            'activation': 'relu',
-            'solver': 'adam',
-            'alpha': 0.001,
-            'batch_size': min(200, max(50, len(X_train)//100)),
-            'learning_rate_init': self.config.learning_rate,
-            'max_iter': self.config.epochs,
-            'early_stopping': True,  # Enable early stopping for better performance
-            'n_iter_no_change': self.config.early_stopping_patience,
-            'validation_fraction': 0.1,  # Use 10% of training for early stopping validation
-            'random_state': self.config.seed
-        }
+        # Log class distribution
+        class_counts = np.bincount(y_train)
+        logger.info(f"Direction distribution: Down={class_counts[0]}, Up={class_counts[1]}")
+        logger.info(f"Class balance: {class_counts[1]/(class_counts[0]+class_counts[1]):.3f} Up ratio")
         
-        # Create and train two-class classifier
+        # Compute sample weights
+        sample_weights = None
+        if self.config.use_class_weights:
+            from sklearn.utils.class_weight import compute_sample_weight
+            sample_weights = compute_sample_weight(class_weight='balanced', y=y_train)
+            logger.info(f"Sample weights: mean={sample_weights.mean():.4f}, std={sample_weights.std():.4f}")
+        
+        # Create model directly (not through TwoClassConfidenceClassifier yet)
+        mlp = MLPClassifier(
+            hidden_layer_sizes=tuple(self.config.mlp_hidden_sizes),
+            activation='relu',
+            solver='sgd',
+            alpha=0.001,
+            batch_size=min(200, max(50, len(X_train)//100)),
+            learning_rate='constant',
+            learning_rate_init=self.config.learning_rate,
+            max_iter=1,
+            warm_start=True,
+            shuffle=True,
+            random_state=self.config.seed
+        )
+        
+        # Initial fit
+        mlp.fit(X_train, y_train, sample_weight=sample_weights)
+        
+        # Training loop with per-epoch logging
+        self.training_history = []
+        val_returns_bps = val_df['ret_bps'].values.astype(np.float32)
+        best_val_loss = float('inf')
+        patience_counter = 0
+        patience = getattr(self.config, 'early_stopping_patience', 10)
+        
+        logger.info(f"Training two-class MLP for {self.config.epochs} epochs...")
+        
+        for epoch in range(1, self.config.epochs + 1):
+            # Train one more epoch
+            mlp.max_iter += 1
+            mlp.fit(X_train, y_train, sample_weight=sample_weights)
+            
+            # Calculate train metrics
+            train_proba = mlp.predict_proba(X_train)
+            train_loss = log_loss(y_train, train_proba, labels=[0, 1])
+            train_pred = np.argmax(train_proba, axis=1)
+            train_acc = accuracy_score(y_train, train_pred)
+            
+            # Calculate val metrics
+            val_proba = mlp.predict_proba(X_val)
+            val_loss = log_loss(y_val, val_proba, labels=[0, 1])
+            val_pred = np.argmax(val_proba, axis=1)
+            val_acc = accuracy_score(y_val, val_pred)
+            
+            # Two-class specific metrics (profit, coverage)
+            p_up = val_proba[:, 1]
+            p_down = val_proba[:, 0]
+            conf = np.maximum(p_up, p_down)
+            exec_mask = conf >= self.config.confidence_tau
+            
+            if exec_mask.sum() > 0:
+                pred_dir = (p_up > p_down).astype(np.int8)
+                gross = np.where(pred_dir[exec_mask] == 1, 
+                            val_returns_bps[exec_mask], 
+                            -val_returns_bps[exec_mask])
+                net = gross - self.config.profit_cost_bps
+                
+                val_profit = float(net.mean())
+                val_cov = float(exec_mask.mean())
+                val_dir_acc = float((pred_dir[exec_mask] == y_val[exec_mask]).mean())
+                val_win_rate = float((net > 0).mean())
+                val_avg_conf = float(conf[exec_mask].mean())
+            else:
+                val_profit = -float(self.config.profit_cost_bps)
+                val_cov = 0.0
+                val_dir_acc = 0.0
+                val_win_rate = 0.0
+                val_avg_conf = float(conf.mean())
+            
+            # Log comprehensive metrics
+            logger.info(f"Epoch {epoch}/{self.config.epochs}: "
+                    f"Train Loss={train_loss:.4f}, Acc={train_acc:.4f} | "
+                    f"Val Loss={val_loss:.4f}, Acc={val_acc:.4f} || "
+                    f"[2-class] cov={val_cov:.3f}, dirAcc={val_dir_acc:.3f}, "
+                    f"profit={val_profit:.1f}bps, win={val_win_rate:.3f}, conf={val_avg_conf:.3f}")
+            
+            # Store history
+            self.training_history.append({
+                'epoch': epoch,
+                'train_loss': float(train_loss),
+                'train_acc': float(train_acc),
+                'val_loss': float(val_loss),
+                'val_acc': float(val_acc),
+                'val_cov': val_cov,
+                'val_dir_acc': val_dir_acc,
+                'val_avg_profit_bps': val_profit,
+                'val_win_rate': val_win_rate,
+                'val_avg_conf': val_avg_conf
+            })
+            
+            # Early stopping based on val_loss
+            if val_loss < best_val_loss - 1e-6:
+                best_val_loss = val_loss
+                patience_counter = 0
+                joblib.dump(mlp, self.config.output_dir / "model_best.joblib")
+            else:
+                patience_counter += 1
+                if patience_counter >= patience:
+                    logger.info(f"Early stopping at epoch {epoch} (patience={patience})")
+                    break
+        
+        # Load best model if saved
+        best_model_path = self.config.output_dir / "model_best.joblib"
+        if best_model_path.exists():
+            mlp = joblib.load(best_model_path)
+            logger.info("Loaded best model from early stopping")
+        
+        final_loss = train_loss if 'train_loss' in locals() else 0.0
+        logger.info(f"Two-class MLP finished: iters={epoch}, final_loss={final_loss:.4f}")
+        
+        # Save loss curve if available
+        if hasattr(mlp, "loss_curve_"):
+            try:
+                loss_curve = np.asarray(mlp.loss_curve_, dtype=float)
+                np.savetxt(self.config.output_dir / "sk_mlp_loss_curve.csv", loss_curve, delimiter=",", fmt="%.6f")
+                
+                plt.figure(figsize=(8, 4.5))
+                plt.plot(np.arange(1, len(loss_curve) + 1), loss_curve)
+                plt.xlabel("Iteration")
+                plt.ylabel("Loss")
+                plt.title("sklearn MLP loss curve (two-class)")
+                plt.grid(True, alpha=0.3)
+                plt.tight_layout()
+                plt.savefig(self.config.output_dir / "sk_mlp_loss_curve.png", dpi=150)
+                plt.close()
+                logger.info("Saved sklearn MLP loss curve: sk_mlp_loss_curve.csv, sk_mlp_loss_curve.png")
+            except Exception as e:
+                logger.warning(f"Could not save sklearn MLP loss curve: {e}")
+        
+        # Save training history
+        if self.training_history:
+            hist_df = pd.DataFrame(self.training_history)
+            hist_df.to_csv(self.config.output_dir / "epoch_metrics_two_class.csv", index=False)
+            logger.info("Saved per-epoch metrics to epoch_metrics_two_class.csv")
+        
+        # Now wrap the trained model in TwoClassConfidenceClassifier
         two_class_classifier = TwoClassConfidenceClassifier(confidence_tau=self.config.confidence_tau)
-        two_class_classifier.fit(X_train, y_train, MLPClassifier, model_params, self.config.use_class_weights)
+        two_class_classifier.model = mlp
+        two_class_classifier.is_calibrated = False
         
         # Calibrate probabilities if enabled
         if self.config.calibrate_probabilities:
+            logger.info("Calibrating two-class probabilities using isotonic method")
             two_class_classifier.calibrate_probabilities(X_val, y_val)
         
         # Optimize confidence threshold
-        val_returns_bps = val_df['ret_bps'].values
-        '''
-        best_tau = two_class_classifier.optimize_confidence_tau_for_profit(
-            X_val, y_val, val_returns_bps, 
-            cost_bps=self.config.profit_cost_bps,
-            tau_grid_start=self.config.confidence_grid_start,
-            tau_grid_end=self.config.confidence_grid_end,
-            tau_grid_step=self.config.confidence_grid_step
-        )
-        
-        two_class_classifier.confidence_tau = best_tau
-        logger.info(f"Optimized confidence tau: {best_tau:.3f}")
-        '''
         if self.config.optimize_threshold_for_profit:
             chosen_tau = two_class_classifier.optimize_confidence_tau_for_profit(
                 X_val, y_val, val_returns_bps,
@@ -1781,9 +1984,9 @@ class CentralizedTrainer:
                 tau_grid_start=self.config.confidence_grid_start,
                 tau_grid_end=self.config.confidence_grid_end,
                 tau_grid_step=self.config.confidence_grid_step,
-                select_by=self.config.optimize_tau_by,             # <-- НОВОЕ
-                min_coverage=self.config.min_coverage,             # <-- НОВОЕ (может быть 0.0)
-                output_dir=self.config.output_dir                  # <-- чтобы сохранить CSV рядом с артефактами
+                select_by=self.config.optimize_tau_by,
+                min_coverage=self.config.min_coverage,
+                output_dir=self.config.output_dir
             )
             logger.info(f"Optimized confidence tau: {chosen_tau:.3f}")
         else:
@@ -1791,11 +1994,10 @@ class CentralizedTrainer:
                 raise ValueError("Pass --confidence_tau or enable --optimize_threshold_for_profit.")
             chosen_tau = float(self.config.confidence_tau)
             logger.info(f"Using provided confidence tau: {chosen_tau:.3f}")
-
+        
         two_class_classifier.confidence_tau = chosen_tau
         self._save_decision_threshold_config(chosen_tau, val_df, two_class_classifier)
-
-
+        
         # Generate test predictions
         test_direction, test_confidence, test_execute = two_class_classifier.predict_with_confidence(X_test)
         test_proba = two_class_classifier.predict_proba(X_test)
@@ -1812,7 +2014,7 @@ class CentralizedTrainer:
             'test_confidence': test_confidence,
             'test_execute': test_execute,
             'y_test': y_test,
-            'training_history': [],  # Two-class doesn't have unified history
+            'training_history': self.training_history,
             'mode': 'two_class'
         }
     
@@ -1851,85 +2053,193 @@ class CentralizedTrainer:
         logger.info(f"Validation profit with tau={chosen_tau:.3f}: {val_profit_mean:.2f} bps "
                    f"(coverage: {val_execute.mean():.1%})")
     
-    def _train_sklearn_mlp(self, X_train: np.ndarray, y_train: np.ndarray,
-                          X_val: np.ndarray, y_val: np.ndarray,
-                          X_test: np.ndarray, y_test: np.ndarray,
-                          train_df: pd.DataFrame, val_df: pd.DataFrame, test_df: pd.DataFrame) -> Dict[str, Any]:
-        """Enhanced sklearn MLP training."""
-        logger.info("Using sklearn MLPClassifier")
-        
+    def _train_sklearn_mlp(self,
+                        X_train: np.ndarray, y_train: np.ndarray,
+                        X_val: np.ndarray,   y_val: np.ndarray,
+                        X_test: np.ndarray,  y_test: np.ndarray,
+                        train_df: pd.DataFrame, val_df: pd.DataFrame, test_df: pd.DataFrame) -> Dict[str, Any]:
+        """Enhanced sklearn MLP training with REAL per-epoch logging."""
+        logger.info("Using sklearn MLPClassifier/Regressor with per-epoch logging")
+
         from sklearn.neural_network import MLPClassifier, MLPRegressor
+        from sklearn.metrics import log_loss, accuracy_score, f1_score
+        from sklearn.utils.class_weight import compute_sample_weight
         from sklearn.exceptions import ConvergenceWarning
         warnings.filterwarnings('ignore', category=ConvergenceWarning)
-        
+
+        epochs = int(self.config.epochs)
+        outdir = self.config.output_dir
+        outdir.mkdir(parents=True, exist_ok=True)
+
+        self.training_history = []
+
+        # CLASSIFICATION
         if self.config.task == 'classification':
-            model = MLPClassifier(
+            is_two_class = bool(getattr(self.config, "two_class_mode", False))
+            classes = np.unique(y_train).astype(int)
+            
+            sample_weight = None
+            if self.config.use_class_weights:
+                sample_weight = compute_sample_weight(class_weight='balanced', y=y_train).astype(np.float64)
+
+            # Create model with warm_start and max_iter=1
+            mlp = MLPClassifier(
                 hidden_layer_sizes=tuple(self.config.mlp_hidden_sizes),
                 activation='relu',
-                solver='adam',
+                solver='sgd',  # MUST use 'sgd' for iterative training
                 alpha=0.001,
                 batch_size=min(200, max(50, len(X_train)//100)),
+                learning_rate='constant',
                 learning_rate_init=self.config.learning_rate,
-                max_iter=self.config.epochs,
-                early_stopping=True,  # Enable early stopping for better performance
-                n_iter_no_change=self.config.early_stopping_patience,
-                validation_fraction=0.1,
+                max_iter=1,  # One pass per epoch
+                warm_start=True,  # Keep weights between calls
+                shuffle=True,
                 random_state=self.config.seed
             )
-        else:
-            model = MLPRegressor(
-                hidden_layer_sizes=tuple(self.config.mlp_hidden_sizes),
-                activation='relu',
-                solver='adam',
-                alpha=0.001,
-                batch_size=min(200, max(50, len(X_train)//100)),
-                learning_rate_init=self.config.learning_rate,
-                max_iter=self.config.epochs,
-                early_stopping=False,
-                n_iter_no_change=self.config.early_stopping_patience,
-                random_state=self.config.seed
-            )
-        
-        # Apply class weighting
-        sample_weights = None
-        if self.config.task == 'classification' and self.config.use_class_weights:
-            sample_weights = compute_sample_weight(class_weight='balanced', y=y_train).astype(np.float32)
-            logger.info(f"Sample weights: mean={sample_weights.mean():.4f}, std={sample_weights.std():.4f}")
-        
-        # Train model
-        logger.info("Training sklearn MLP...")
-        if sample_weights is not None:
-            model.fit(X_train, y_train, sample_weight=sample_weights)
-        else:
-            model.fit(X_train, y_train)
-        
-        # Generate predictions
+
+            # Initialize the model
+            mlp.fit(X_train, y_train, sample_weight=sample_weight)
+
+            best_val_loss = float('inf')
+            patience = int(getattr(self.config, "early_stopping_patience", 5))
+            wait = 0
+
+            logger.info("Training sklearn MLP (iterative with warm_start)...")
+            for epoch in range(1, epochs + 1):
+                # Train one more iteration
+                mlp.max_iter += 1
+                mlp.fit(X_train, y_train, sample_weight=sample_weight)
+
+                # Calculate metrics
+                train_proba = mlp.predict_proba(X_train)
+                train_loss = log_loss(y_train, train_proba, labels=classes)
+                train_pred = np.argmax(train_proba, axis=1)
+                train_acc = accuracy_score(y_train, train_pred)
+
+                val_proba = mlp.predict_proba(X_val)
+                val_loss = log_loss(y_val, val_proba, labels=classes)
+                val_pred = np.argmax(val_proba, axis=1)
+                val_acc = accuracy_score(y_val, val_pred)
+                val_f1 = f1_score(y_val, val_pred, average='macro', zero_division=0)
+
+                # Two-class snapshot if applicable
+                snap = {}
+                if is_two_class:
+                    val_returns_bps = val_df['ret_bps'].values.astype(np.float32)
+                    tau = float(self.config.confidence_tau)
+                    
+                    p_up = val_proba[:, 1]
+                    conf = np.maximum(p_up, 1 - p_up)
+                    exec_mask = conf >= tau
+                    
+                    if exec_mask.sum() > 0:
+                        pred_dir = (p_up > 0.5).astype(np.int8)
+                        gross = np.where(pred_dir[exec_mask] == 1, 
+                                    val_returns_bps[exec_mask], 
+                                    -val_returns_bps[exec_mask])
+                        net = gross - float(self.config.profit_cost_bps)
+                        
+                        snap = dict(
+                            val_cov=float(exec_mask.mean()),
+                            val_dir_acc=float((pred_dir[exec_mask] == y_val[exec_mask]).mean()),
+                            val_avg_profit_bps=float(net.mean()),
+                            val_win_rate=float((net > 0).mean()),
+                            val_avg_conf=float(conf[exec_mask].mean())
+                        )
+
+                msg = (f"Epoch {epoch}/{epochs}: "
+                    f"Train Loss={train_loss:.4f}, Acc={train_acc:.4f} | "
+                    f"Val Loss={val_loss:.4f}, Acc={val_acc:.4f}, F1={val_f1:.4f}")
+                if snap:
+                    msg += (f" || [VAL] cov={snap['val_cov']:.3f}, "
+                        f"dirAcc={snap['val_dir_acc']:.3f}, "
+                        f"profit={snap['val_avg_profit_bps']:.1f}bps")
+                logger.info(msg)
+
+                row = dict(epoch=epoch,
+                        train_loss=float(train_loss), val_loss=float(val_loss),
+                        train_acc=float(train_acc), val_acc=float(val_acc),
+                        val_f1=float(val_f1))
+                row.update(snap)
+                self.training_history.append(row)
+
+                # Early stopping
+                if val_loss + 1e-6 < best_val_loss:
+                    best_val_loss = val_loss
+                    wait = 0
+                    joblib.dump(mlp, outdir / "model_best.joblib")
+                else:
+                    wait += 1
+                    if wait >= patience:
+                        logger.info(f"Early stopping at epoch {epoch}")
+                        break
+
+            # Load best model
+            best_path = outdir / "model_best.joblib"
+            if best_path.exists():
+                mlp = joblib.load(best_path)
+
+            # Test predictions
+            test_proba = mlp.predict_proba(X_test)
+            test_pred = np.argmax(test_proba, axis=1)
+
+            joblib.dump(mlp, outdir / 'model.joblib')
+
+            # Save history
+            hist_df = pd.DataFrame(self.training_history)
+            fname = "epoch_metrics_two_class.csv" if is_two_class else "epoch_metrics.csv"
+            hist_df.to_csv(outdir / fname, index=False)
+            logger.info(f"Saved per-epoch metrics to {fname}")
+
+            self.model = mlp
+
+            return {
+                'model': mlp,
+                'test_pred': test_pred,
+                'test_proba': test_proba,
+                'y_test': y_test,
+                'training_history': self.training_history,
+                'mode': 'two_class' if is_two_class else 'standard'
+            }
+
+        # =========================
+        # REGRESSION (no partial_fit)
+        # =========================
+        model = MLPRegressor(
+            hidden_layer_sizes=tuple(self.config.mlp_hidden_sizes),
+            activation='relu',
+            solver='adam',
+            alpha=0.001,
+            batch_size=min(200, max(50, len(X_train)//100)),
+            learning_rate_init=self.config.learning_rate,
+            max_iter=epochs,
+            early_stopping=False,
+            random_state=self.config.seed
+        )
+
+        logger.info("Training sklearn MLPRegressor...")
+        model.fit(X_train, y_train)
+
+        if hasattr(model, "loss_curve_") and len(model.loss_curve_) > 0:
+            self.training_history = [{'epoch': i+1, 'train_loss': float(l)} for i, l in enumerate(model.loss_curve_)]
+            pd.DataFrame(self.training_history).to_csv(outdir / "epoch_metrics_regression.csv", index=False)
+            logger.info("Saved per-epoch metrics to epoch_metrics_regression.csv")
+
         test_pred = model.predict(X_test)
-        
-        if self.config.task == 'classification':
-            test_proba = model.predict_proba(X_test)
-        else:
-            test_proba = None
-        
-        # Save model
-        joblib.dump(model, self.config.output_dir / 'model.joblib')
-        
-        # Training history
-        self.training_history = [
-            {'epoch': i+1, 'train_loss': loss} 
-            for i, loss in enumerate(model.loss_curve_)
-        ]
-        
+        test_proba = None
+
+        joblib.dump(model, outdir / 'model.joblib')
         self.model = model
-        
+
         return {
             'model': model,
             'test_pred': test_pred,
             'test_proba': test_proba,
             'y_test': y_test,
             'training_history': self.training_history,
-            'mode': 'standard'
+            'mode': 'regression'
         }
+
     
     def _train_two_stage_sklearn(self, X_train: np.ndarray, y_train: np.ndarray,
                                X_val: np.ndarray, y_val: np.ndarray,
@@ -2126,6 +2436,19 @@ class CentralizedTrainer:
         val_loader = DataLoader(val_dataset, batch_size=self.config.batch_size, 
                               shuffle=False, num_workers=0, pin_memory=True)
         
+        if self.config.two_class_mode:
+            snapshot = self._two_class_val_snapshot(
+                X_val_seq, self._val_y_direction, self._val_ret_bps, model,
+                is_lstm=True, val_extra=(X_val_seq, val_lengths)
+            )
+            logger.info(f"    [VAL two-class] cov={snapshot['val_cov']:.4f} | "
+                        f"dirAcc={snapshot['val_dir_acc']:.4f} | "
+                        f"avgP={snapshot['val_avg_profit_bps']:.2f}bps | "
+                        f"win={snapshot['val_win_rate']:.4f} | "
+                        f"c={snapshot['val_avg_conf']:.3f}")
+            history_entry.update(snapshot)
+
+
         # Training loop
         best_val_loss = float('inf')
         patience_counter = 0
@@ -2231,7 +2554,19 @@ class CentralizedTrainer:
                 if patience_counter >= self.config.early_stopping_patience:
                     logger.info(f"Early stopping at epoch {epoch+1}")
                     break
-            
+
+            if self.config.two_class_mode:
+                snapshot = self._two_class_val_snapshot(
+                    X_val, self._val_y_direction, self._val_ret_bps, model, is_lstm=False
+                )
+                logger.info(f"    [VAL two-class] cov={snapshot['val_cov']:.4f} | "
+                            f"dirAcc={snapshot['val_dir_acc']:.4f} | "
+                            f"avgP={snapshot['val_avg_profit_bps']:.2f}bps | "
+                            f"win={snapshot['val_win_rate']:.4f} | "
+                            f"c={snapshot['val_avg_conf']:.3f}")
+                history_entry.update(snapshot)
+
+
             # Store training history
             history_entry = {
                 'epoch': epoch + 1,
@@ -2306,32 +2641,53 @@ class CentralizedTrainer:
         logger.info("Results saved successfully")
     
     def _evaluate_two_class_results(self, results: Dict[str, Any]) -> None:
-        """Evaluate and save results for two-class mode."""
+        """Evaluate with comprehensive metrics matching federated format."""
         test_df = results['test_df']
         
-        # Extract predictions
         direction_pred = results['test_pred']
         confidence = results.get('test_confidence', np.ones(len(direction_pred)))
         execute = results.get('test_execute', np.ones(len(direction_pred), dtype=bool))
         returns_bps = test_df['ret_bps'].values
         y_direction_true = results['y_test']
         
-        # Calculate two-class specific metrics
+        # Calculate metrics
         metrics_calc = MetricsCalculator(self.config.task)
         two_class_metrics = metrics_calc.calculate_two_class_metrics(
             y_direction_true, direction_pred, confidence, execute, 
             returns_bps, self.config.profit_cost_bps
         )
         
-        # Calculate per-symbol metrics
+        # Per-symbol metrics
         per_symbol_metrics = metrics_calc.calculate_two_class_per_symbol_metrics(
             test_df, direction_pred, confidence, execute, returns_bps, self.config.profit_cost_bps
         )
+
+        logger.info("="*60)
+        logger.info("CENTRALIZED TRAINING FINAL RESULTS")
+        logger.info("="*60)
         
-        # Log key metrics
-        self._log_two_class_metrics(two_class_metrics)
+        logger.info("TEST METRICS:")
+        logger.info(f"  Direction Accuracy: {two_class_metrics.get('direction_accuracy', 0):.4f}")
+        logger.info(f"  Coverage: {two_class_metrics.get('coverage', 0):.4f} "
+                f"({two_class_metrics.get('n_executed', 0)}/{two_class_metrics.get('n_total', 0)} samples)")
+        logger.info(f"  Avg Confidence: {two_class_metrics.get('avg_confidence', 0):.4f}")
+        logger.info(f"  Avg Profit: {two_class_metrics.get('avg_profit_bps', 0):.2f} bps")
+        logger.info(f"  Median Profit: {two_class_metrics.get('median_profit_bps', 0):.2f} bps")
+        logger.info(f"  Win Rate: {two_class_metrics.get('win_rate', 0):.3f}")
+        logger.info(f"  Sharpe Ratio: {two_class_metrics.get('profit_sharpe', 0):.3f}")
+        logger.info(f"  Profit Range: [{two_class_metrics.get('min_profit_bps', 0):.1f}, "
+                f"{two_class_metrics.get('max_profit_bps', 0):.1f}] bps")
         
-        # Save results
+        # Percentiles
+        logger.info(f"  Profit Percentiles:")
+        logger.info(f"    P10: {two_class_metrics.get('profit_p10_bps', 0):.2f} bps")
+        logger.info(f"    P25: {two_class_metrics.get('profit_p25_bps', 0):.2f} bps")
+        logger.info(f"    P75: {two_class_metrics.get('profit_p75_bps', 0):.2f} bps")
+        logger.info(f"    P90: {two_class_metrics.get('profit_p90_bps', 0):.2f} bps")
+        
+        logger.info("="*60)
+        
+        # Save with extended metrics
         self._save_two_class_artifacts(two_class_metrics, per_symbol_metrics, results)
     
     def _evaluate_standard_results(self, results: Dict[str, Any]) -> None:
@@ -2409,9 +2765,18 @@ class CentralizedTrainer:
             'confidence_grid_step': self.config.confidence_grid_step,
             'profit_cost_bps': self.config.profit_cost_bps,
         })
-        
+
         with open(output_dir / 'config.yaml', 'w') as f:
             yaml.dump(config_dict, f, indent=2)
+
+        metrics['confidence_tau'] = float(self.config.confidence_tau)
+        metrics['profit_cost_bps'] = float(self.config.profit_cost_bps)
+        out_dir = self.config.output_dir
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        with open(out_dir / "metrics_two_class.json", "w", encoding="utf-8") as f:
+            json.dump(metrics, f, ensure_ascii=False, indent=2)
+
         
         # Save two-class specific metrics
         with open(output_dir / 'metrics_two_class.json', 'w') as f:
@@ -2463,6 +2828,12 @@ class CentralizedTrainer:
       
        
         predictions_df.to_csv(output_dir / 'test_predictions_two_class.csv', index=False)
+
+        # Export the test's "reference index" for fair comparison
+        (predictions_df[['timestamp','symbol']]
+            .drop_duplicates()
+            .sort_values(['timestamp','symbol'])
+            .to_csv(output_dir / 'central_test_index.csv', index=False))
     
     def _save_training_artifacts(self, global_metrics: Dict[str, float],
                                per_symbol_metrics: pd.DataFrame,
@@ -2849,14 +3220,27 @@ def main():
     
     # Validate configuration
     validate_config(config)
-    
-    # Setup logging
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        handlers=[logging.StreamHandler()]
-    )
-    
+ 
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+
+    run_tag = f"{args.model}_h{args.horizon_min}_db{float(args.deadband_bps):.1f}"
+    if args.two_class_mode:
+        run_tag += "_2class"
+    if args.calibrate_probabilities:
+        run_tag += "_cal"
+
+    output_dir = Path(args.out) / f"{timestamp}_{run_tag}"
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    root = logging.getLogger()
+    root.handlers.clear()
+    root.setLevel(logging.INFO)
+
+    _console = logging.StreamHandler()
+    _console.setLevel(logging.INFO)
+    _console.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+    root.addHandler(_console)
+  
     logger.info("="*80)
     if config.two_class_mode:
         logger.info("ENHANCED CENTRALIZED TRAINING - TWO-CLASS MODE")
@@ -2984,25 +3368,8 @@ def main():
                 logger.info(f"  MAE: {final_metrics['mae']:.4f}")
                 logger.info(f"  RMSE: {final_metrics['rmse']:.4f}")
                 logger.info(f"  R²: {final_metrics['r2']:.4f}")
-                logger.info(f"  Sign Accuracy: {final_metrics['sign_accuracy']:.4f}")
-        
-        logger.info("="*80)
-        logger.info("RECOMMENDATIONS FOR FURTHER IMPROVEMENT:")
-        logger.info("1. Try different deadband_bps values (3-8 bps) for better class balance")
-        logger.info("2. Experiment with feature engineering (rolling windows, cross-asset signals)")
-        logger.info("3. Consider ensemble methods combining multiple models")
-        logger.info("4. Implement cross-validation for more robust evaluation")
-        logger.info("5. Add market regime detection for adaptive thresholds")
-        
-        if config.two_class_mode:
-            logger.info("6. Try different confidence thresholds for risk/return tradeoff")
-            logger.info("7. Experiment with different cost assumptions")
-        else:
-            if not config.use_two_stage:
-                logger.info("6. Enable two-stage training with --use_two_stage for better performance")
-            if not config.calibrate_probabilities:
-                logger.info("7. Enable probability calibration with --calibrate_probabilities")
-            logger.info("8. Try two-class mode with --two_class_mode for direct direction prediction")
+                logger.info(f"  Sign Accuracy: {final_metrics['sign_accuracy']:.4f}")     
+ 
         
         logger.info("="*80)
         

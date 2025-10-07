@@ -1,0 +1,154 @@
+{
+  "centralized": {
+    "max_profit": {
+      "tau": 0.8050000000000003,
+      "coverage": 0.061486046727854744,
+      "n_executed": 46291.0,
+      "direction_accuracy": 0.8326888596055388,
+      "avg_profit_bps": 218.42453320938506,
+      "median_profit_bps": 193.99904852257944,
+      "win_rate": 0.8326888596055388,
+      "sharpe": 0.9029338891440278,
+      "ev_per_sample": 13.43006105542211,
+      "total_profit_bps": 10111090.066795643
+    },
+    "max_ev": {
+      "tau": 0.5,
+      "coverage": 1.0,
+      "n_executed": 752870.0,
+      "direction_accuracy": 0.6885690756704345,
+      "avg_profit_bps": 77.71696490427811,
+      "median_profit_bps": 74.29908872871692,
+      "win_rate": 0.6885690756704345,
+      "sharpe": 0.43327107833281764,
+      "ev_per_sample": 77.71696490427811,
+      "total_profit_bps": 58510771.36748386
+    },
+    "max_sharpe": {
+      "tau": 0.9000000000000004,
+      "coverage": 0.0001899398302495783,
+      "n_executed": 143.0,
+      "direction_accuracy": 1.0,
+      "avg_profit_bps": 48.25742973453564,
+      "median_profit_bps": 46.1721919801893,
+      "win_rate": 1.0,
+      "sharpe": 3.5111968950058845,
+      "ev_per_sample": 0.00916600801205865,
+      "total_profit_bps": 6900.812452038596
+    }
+  },
+  "federated_iid": {
+    "max_profit": {
+      "tau": 0.5750000000000001,
+      "coverage": 0.28489911936987794,
+      "n_executed": 214492.0,
+      "direction_accuracy": 0.6909208735057718,
+      "avg_profit_bps": 96.2765190133644,
+      "median_profit_bps": 83.68449532160304,
+      "win_rate": 0.6909208735057718,
+      "sharpe": 0.4756028396673821,
+      "ev_per_sample": 27.42909548290483,
+      "total_profit_bps": 20650543.11621456
+    },
+    "max_ev": {
+      "tau": 0.5,
+      "coverage": 1.0,
+      "n_executed": 752870.0,
+      "direction_accuracy": 0.6152974617131776,
+      "avg_profit_bps": 53.99025361215667,
+      "median_profit_bps": 54.27885794441967,
+      "win_rate": 0.6152974617131776,
+      "sharpe": 0.28717014928016965,
+      "ev_per_sample": 53.99025361215667,
+      "total_profit_bps": 40647642.236984394
+    },
+    "max_sharpe": {
+      "tau": 0.5700000000000001,
+      "coverage": 0.31405820393959116,
+      "n_executed": 236445.0,
+      "direction_accuracy": 0.6937681067478695,
+      "avg_profit_bps": 95.30454613465051,
+      "median_profit_bps": 84.33971089993764,
+      "win_rate": 0.6937681067478695,
+      "sharpe": 0.4799218050485865,
+      "ev_per_sample": 29.931174586326243,
+      "total_profit_bps": 22534283.41080744
+    }
+  },
+  "federated_symbol": {
+    "max_profit": {
+      "tau": 0.6150000000000001,
+      "coverage": 0.29851103112091065,
+      "n_executed": 224740.0,
+      "direction_accuracy": 0.7003070214470054,
+      "avg_profit_bps": 108.04423210223788,
+      "median_profit_bps": 95.26954349798822,
+      "win_rate": 0.7003070214470054,
+      "sharpe": 0.5194782491432992,
+      "ev_per_sample": 32.25239513150603,
+      "total_profit_bps": 24281860.722656943
+    },
+    "max_ev": {
+      "tau": 0.5,
+      "coverage": 1.0,
+      "n_executed": 752870.0,
+      "direction_accuracy": 0.6450316787758843,
+      "avg_profit_bps": 63.104066146068696,
+      "median_profit_bps": 63.44131364710559,
+      "win_rate": 0.6450316787758843,
+      "sharpe": 0.3409210032363495,
+      "ev_per_sample": 63.104066146068696,
+      "total_profit_bps": 47509158.27939074
+    },
+    "max_sharpe": {
+      "tau": 0.5850000000000001,
+      "coverage": 0.4224726712447036,
+      "n_executed": 318067.0,
+      "direction_accuracy": 0.7124127935309227,
+      "avg_profit_bps": 105.47642340506128,
+      "median_profit_bps": 95.21218353005555,
+      "win_rate": 0.7124127935309227,
+      "sharpe": 0.5371102359745334,
+      "ev_per_sample": 44.560906349273615,
+      "total_profit_bps": 33548569.563177627
+    }
+  },
+  "federated_timeblocks": {
+    "max_profit": {
+      "tau": 0.6100000000000001,
+      "coverage": 0.30522002470546045,
+      "n_executed": 229791.0,
+      "direction_accuracy": 0.692485780557115,
+      "avg_profit_bps": 106.21557534925407,
+      "median_profit_bps": 93.36333952099308,
+      "win_rate": 0.692485780557115,
+      "sharpe": 0.5095239031669316,
+      "ev_per_sample": 32.41912053220402,
+      "total_profit_bps": 24407383.275080442
+    },
+    "max_ev": {
+      "tau": 0.505,
+      "coverage": 0.9651307662677487,
+      "n_executed": 726618.0,
+      "direction_accuracy": 0.6485856392217093,
+      "avg_profit_bps": 65.1025550057476,
+      "median_profit_bps": 64.63804483742386,
+      "win_rate": 0.6485856392217093,
+      "sharpe": 0.34952955731987795,
+      "ev_per_sample": 62.83247879868544,
+      "total_profit_bps": 47304688.31316631
+    },
+    "max_sharpe": {
+      "tau": 0.5750000000000001,
+      "coverage": 0.46005817737457994,
+      "n_executed": 346364.0,
+      "direction_accuracy": 0.7124614567333788,
+      "avg_profit_bps": 103.22736302744045,
+      "median_profit_bps": 94.21402811273228,
+      "win_rate": 0.7124614567333788,
+      "sharpe": 0.532932445062327,
+      "ev_per_sample": 47.49059248958835,
+      "total_profit_bps": 35754242.36763638
+    }
+  }
+}

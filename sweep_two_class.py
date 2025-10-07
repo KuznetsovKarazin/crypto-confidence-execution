@@ -10,10 +10,10 @@ def run(cmd):
         subprocess.run(cmd, check=True)
     except subprocess.CalledProcessError as e:
         print(f"[SWEEP] failed (exit {e.returncode}): {' '.join(str(c) for c in cmd)}", flush=True)
-        # продолжаем остальные прогоны
+        
 
 def parse_grid(s: str):
-    # формат "start:end:step" -> (float, float, float)
+    
     parts = s.split(":")
     if len(parts) != 3:
         raise ValueError("Grid must be like '0.50:0.98:0.01'")
@@ -50,9 +50,9 @@ def main():
     p.add_argument("--device", default="auto", choices=["auto","cpu","cuda"])
     args = p.parse_args()
 
-    # калибровка
+    
     calibrate = (not args.no_calibrate) and args.calibrate
-    # проверка грида
+    
     _ = parse_grid(args.grid)
 
     base = [
@@ -75,7 +75,7 @@ def main():
     if calibrate:
         base += ["--calibrate_probabilities"]
 
-    # Режим 1: фиксированный τ (если задан --fixed_tau)
+    
     if args.fixed_tau:
         for h in args.horizons:
             for db in args.deadbands:
@@ -88,7 +88,7 @@ def main():
                     run(cmd)
         return
 
-    # Режим 2: автоподбор τ по критериям
+    
     for h in args.horizons:
         for db in args.deadbands:
             for crit in args.optimize_tau_by:

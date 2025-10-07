@@ -1,0 +1,12 @@
+{
+  "coverage": 0.17083958717972558,
+  "n_executed": 128620,
+  "n_total": 752870,
+  "direction_accuracy": 0.6287513605971078,
+  "avg_profit_bps": 77.30045829362331,
+  "median_profit_bps": 58.8924912568638,
+  "win_rate": 0.6287513605971078,
+  "avg_confidence": 0.8178839683532715,
+  "profit_std_bps": 210.4046489148894,
+  "profit_sharpe": 0.3673894977540071
+}
